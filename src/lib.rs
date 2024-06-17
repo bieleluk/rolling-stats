@@ -1,4 +1,5 @@
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
+use rand_distr::{Distribution, Normal};
 use std::collections::VecDeque;
 use std::io::{self, Write};
 
@@ -52,6 +53,16 @@ impl RollingStats {
             return 0.0;
         }
         self.sum as f32 / count as f32
+    }
+    pub fn sample(&self) -> f32 {
+        let mean = self.mean();
+        let std_dev = self.std_dev();
+        if std_dev == 0.0 {
+            return mean;
+        }
+        // Can not fail, because std_Dev is always non-negative
+        let normal = Normal::new(mean, std_dev).unwrap();
+        normal.sample(&mut rand::thread_rng())
     }
     pub fn std_dev(&self) -> f32 {
         let count = self.values.len();

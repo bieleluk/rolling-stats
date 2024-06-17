@@ -4,9 +4,11 @@ use std::io::Write;
 fn main() {
     println!("Creating empty default stats");
     let mut stats: RollingStats = RollingStats::default();
+    println!("Random sample {}", stats.sample());
     assert!(stats.write(&[0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4]).is_ok());
     assert_eq!(stats.mean(), 3.0);
     println!("{:?}", stats);
+    println!("Random sample {}", stats.sample());
 
     println!("Creating little endian stats with size 4");
     let mut stats: RollingStats = RollingStats::new(4, Endianness::Little);

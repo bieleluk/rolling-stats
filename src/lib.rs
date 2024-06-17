@@ -24,4 +24,10 @@ impl RollingStats {
             values: VecDeque::with_capacity(window_size),
         }
     }
+    pub fn add_sample(&mut self, value: i32) {
+        if self.values.len() == self.window_size {
+            self.values.pop_front();
+        }
+        self.values.push_back(value);
+    }
 }

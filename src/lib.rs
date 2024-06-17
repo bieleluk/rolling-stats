@@ -5,11 +5,17 @@ use std::io::{self, Write};
 
 #[derive(Debug)]
 pub struct RollingStats {
+    // Size of the rolling window
     window_size: usize,
+    // Endianness for interpreting bytes
     endianness: Endianness,
+    // Queue of values in the rolling window
     values: VecDeque<i32>,
+    // Buffer for leftover bytes
     remainder: Vec<u8>,
+    // Sum of values in the window
     sum: i64,
+    // Sum of squares of values in the window
     sum_of_squares: i64,
 }
 
@@ -46,6 +52,7 @@ impl RollingStats {
     }
     pub fn mean(&self) -> f32 {
         let count = self.values.len();
+        // In case of no data, mean is 0
         if count == 0 {
             return 0.0;
         }
@@ -57,12 +64,13 @@ impl RollingStats {
         if std_dev == 0.0 {
             return mean;
         }
-        // Can not fail, because std_Dev is always non-negative
+        // Can not fail, because std_dev is always non-negative
         let normal = Normal::new(mean, std_dev).unwrap();
         normal.sample(&mut rand::thread_rng())
     }
     pub fn std_dev(&self) -> f32 {
         let count = self.values.len();
+        // In case of 1 or 0 data samples, std dev is 0
         if count < 2 {
             return 0.0;
         }
@@ -88,30 +96,31 @@ impl Write for RollingStats {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let mut bytes_consumed = 0;
         let mut start = 0;
+        // Remainder bytes from the previous write
         if !self.remainder.is_empty() {
             start = 4 - self.remainder.len();
-            println!("Need {} bytes to extend the reminder", start);
             if buf.len() >= start {
+                // Complete unfinished integer
                 self.remainder.extend_from_slice(&buf[0..start]);
                 let value = self.read_i32_from_bytes(&self.remainder);
                 self.add_sample(value);
                 self.remainder.clear();
                 bytes_consumed += start;
             } else {
+                // Written buffer is completely moved to remainder
                 self.remainder.extend_from_slice(buf);
                 return Ok(buf.len());
             }
         }
+        // Iterate through the complete 4-byte integers
         for chunk in buf[start..].chunks(4) {
             if chunk.len() == 4 {
                 let value = self.read_i32_from_bytes(chunk);
                 self.add_sample(value);
                 bytes_consumed += 4;
             } else {
-                println!("Remainder of size {}", chunk.len());
-                // self.remainder_size = chunk.len();
+                // There is a byte reminder at the end
                 self.remainder.extend_from_slice(chunk);
-                // println!("{}", self.remainder);
                 bytes_consumed += chunk.len();
             }
         }
@@ -205,9 +214,12 @@ mod tests {
         stats.add_sample(2);
         stats.add_sample(3);
         let std_dev = stats.std_dev();
+
         assert!((std_dev - 0.81649658092773).abs() < 0.000001);
+
         stats.add_sample(4);
         let std_dev = stats.std_dev();
+
         assert!((std_dev - 0.81649658092773).abs() < 0.000001);
     }
 
@@ -232,6 +244,7 @@ mod tests {
     fn test_read_i32_le() {
         let stats = RollingStats::new(3, Endianness::Little);
         let bytes = vec![1, 0, 0, 0];
+
         assert_eq!(stats.read_i32_from_bytes(&bytes), 1);
     }
 
@@ -239,6 +252,7 @@ mod tests {
     fn test_read_i32_be() {
         let stats = RollingStats::new(3, Endianness::Big);
         let bytes = vec![0, 0, 0, 1];
+
         assert_eq!(stats.read_i32_from_bytes(&bytes), 1);
     }
 
@@ -247,6 +261,7 @@ mod tests {
         let mut stats = RollingStats::new(3, Endianness::Big);
         let bytes = vec![0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3];
         let ret = stats.write(&bytes).unwrap();
+
         assert_eq!(ret, 12);
         assert_eq!(stats.values.len(), 3);
         assert_eq!(stats.sum, 6);
@@ -256,10 +271,11 @@ mod tests {
     #[test]
     fn test_write_with_remainder() {
         let mut stats = RollingStats::new(4, Endianness::Big);
-        
+
         // Addition of several elements with a remainder
         let bytes = vec![0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0];
         let ret = stats.write(&bytes).unwrap();
+
         assert_eq!(ret, 13);
         assert_eq!(stats.values.len(), 3);
         assert_eq!(stats.sum, 6);
@@ -268,6 +284,7 @@ mod tests {
         // Only extending a reminder
         let bytes = vec![0];
         let ret = stats.write(&bytes).unwrap();
+
         assert_eq!(ret, 1);
         assert_eq!(stats.values.len(), 3);
         assert_eq!(stats.sum, 6);

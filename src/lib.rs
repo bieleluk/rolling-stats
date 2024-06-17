@@ -15,6 +15,12 @@ pub enum Endianness {
     Big,
 }
 
+impl Default for Endianness {
+    fn default() -> Self {
+        Endianness::Big
+    }
+}
+
 impl RollingStats {
     pub fn new(window_size: usize, endianness: Endianness) -> Self {
         assert!(window_size > 0, "Window size must be greater than 0");
@@ -53,5 +59,11 @@ impl RollingStats {
         let mean = self.get_mean();
         let variance = (self.sum_of_squares as f32 / count as f32) - (mean * mean);
         variance.sqrt()
+    }
+}
+
+impl Default for RollingStats {
+    fn default() -> Self {
+        RollingStats::new(3, Endianness::default())
     }
 }

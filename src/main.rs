@@ -1,8 +1,8 @@
 use rolling_stats::{RollingStats,Endianness};
 
 fn main() {
-    println!("Creating empty stats with size 2");
-    let mut stats: RollingStats = RollingStats::new(2, Endianness::Big);
+    println!("Creating empty default stats");
+    let mut stats: RollingStats = RollingStats::default();
     println!("Stats for empty struct: {} {}", stats.get_mean(), stats.get_std_dev());
     println!("{:?}", stats);
     println!("Adding 10, expecting 1 element");
@@ -13,7 +13,7 @@ fn main() {
     stats.add_sample(-20);
     println!("{:?}", stats);
     println!("Stats: {} {}", stats.get_mean(), stats.get_std_dev());
-    println!("Adding 5, expecting 2 elements: -20 and 5");
+    println!("Adding 5, expecting 3 elements:");
     stats.add_sample(5);
     println!("{:?}", stats);
     println!("Stats: {} {}", stats.get_mean(), stats.get_std_dev());

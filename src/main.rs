@@ -18,8 +18,11 @@ fn main() {
 
     println!("Creating empty default stats");
     let mut stats: RollingStats = RollingStats::default();
-    assert!(stats.write(&[0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 4]).is_ok());
-    assert_eq!(stats.mean(), 2.0);
+    assert!(stats.write(&[0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0]).is_ok());
+    println!("{:?}", stats);
+    assert!(stats.write(&[0]).is_ok());
+    println!("{:?}", stats);
+    assert!(stats.write(&[1, 0, 0, 0]).is_ok());
     println!("{:?}", stats);
 
 

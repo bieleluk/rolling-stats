@@ -13,16 +13,11 @@ pub struct RollingStats {
     sum_of_squares: i64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default, PartialEq)]
 pub enum Endianness {
     Little,
+    #[default]
     Big,
-}
-
-impl Default for Endianness {
-    fn default() -> Self {
-        Endianness::Big
-    }
 }
 
 impl RollingStats {
@@ -125,5 +120,165 @@ impl Write for RollingStats {
 
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    #[test]
+    fn test_add_sample() {
+        let mut stats = RollingStats::new(3, Endianness::Big);
+        stats.add_sample(1);
+        stats.add_sample(2);
+        stats.add_sample(3);
+
+        let expected = VecDeque::from_iter([1, 2, 3]);
+
+        assert_eq!(stats.values, expected);
+    }
+
+    #[test]
+    fn test_default_params() {
+        let mut stats = RollingStats::default();
+        assert_eq!(stats.endianness, Endianness::Big);
+        stats.add_sample(1);
+        stats.add_sample(2);
+        stats.add_sample(3);
+        assert_eq!(stats.values.len(), 3);
+        stats.add_sample(4);
+        assert_eq!(stats.values.len(), 3);
+    }
+
+    #[test]
+    fn test_sample_forgetting() {
+        let mut stats = RollingStats::new(3, Endianness::Little);
+        stats.add_sample(1);
+        stats.add_sample(2);
+        stats.add_sample(3);
+        stats.add_sample(4);
+
+        let expected = VecDeque::from_iter([2, 3, 4]);
+
+        assert_eq!(stats.values, expected);
+    }
+
+    #[test]
+    fn test_win_size() {
+        let mut stats = RollingStats::new(4, Endianness::Little);
+        stats.add_sample(1);
+        stats.add_sample(2);
+        stats.add_sample(3);
+        stats.add_sample(4);
+        assert_eq!(stats.values.len(), 4);
+        stats.add_sample(5);
+        assert_eq!(stats.values.len(), 4);
+    }
+
+    #[test]
+    fn test_sums_and_squaresums() {
+        let mut stats = RollingStats::new(3, Endianness::Big);
+        stats.add_sample(1);
+        stats.add_sample(2);
+        stats.add_sample(3);
+        assert_eq!(stats.sum, 6);
+        assert_eq!(stats.sum_of_squares, 14);
+    }
+
+    #[test]
+    fn test_mean() {
+        let mut stats = RollingStats::new(3, Endianness::Big);
+        stats.add_sample(1);
+        stats.add_sample(2);
+        stats.add_sample(3);
+        assert_eq!(stats.mean(), 2.0);
+        stats.add_sample(4);
+        assert_eq!(stats.mean(), 3.0);
+    }
+
+    #[test]
+    fn test_std_dev() {
+        let mut stats = RollingStats::new(3, Endianness::Big);
+        stats.add_sample(1);
+        stats.add_sample(2);
+        stats.add_sample(3);
+        let std_dev = stats.std_dev();
+        assert!((std_dev - 0.81649658092773).abs() < 0.000001);
+        stats.add_sample(4);
+        let std_dev = stats.std_dev();
+        assert!((std_dev - 0.81649658092773).abs() < 0.000001);
+    }
+
+    #[test]
+    fn test_sample_one_sample() {
+        let mut stats = RollingStats::new(3, Endianness::Big);
+        stats.add_sample(1);
+        let value = stats.sample();
+
+        assert!((value - 1.0).abs() < 0.000001);
+    }
+
+    #[test]
+    fn test_sample_zero_samples() {
+        let stats = RollingStats::new(3, Endianness::Big);
+        let value = stats.sample();
+
+        assert!((value - 0.0).abs() < 0.000001);
+    }
+
+    #[test]
+    fn test_read_i32_le() {
+        let stats = RollingStats::new(3, Endianness::Little);
+        let bytes = vec![1, 0, 0, 0];
+        assert_eq!(stats.read_i32_from_bytes(&bytes), 1);
+    }
+
+    #[test]
+    fn test_read_i32_be() {
+        let stats = RollingStats::new(3, Endianness::Big);
+        let bytes = vec![0, 0, 0, 1];
+        assert_eq!(stats.read_i32_from_bytes(&bytes), 1);
+    }
+
+    #[test]
+    fn test_write_no_rem() {
+        let mut stats = RollingStats::new(3, Endianness::Big);
+        let bytes = vec![0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3];
+        let ret = stats.write(&bytes).unwrap();
+        assert_eq!(ret, 12);
+        assert_eq!(stats.values.len(), 3);
+        assert_eq!(stats.sum, 6);
+        assert_eq!(stats.remainder.len(), 0);
+    }
+
+    #[test]
+    fn test_write_with_remainder() {
+        let mut stats = RollingStats::new(4, Endianness::Big);
+        
+        // Addition of several elements with a remainder
+        let bytes = vec![0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0];
+        let ret = stats.write(&bytes).unwrap();
+        assert_eq!(ret, 13);
+        assert_eq!(stats.values.len(), 3);
+        assert_eq!(stats.sum, 6);
+        assert_eq!(stats.remainder.len(), 1);
+
+        // Only extending a reminder
+        let bytes = vec![0];
+        let ret = stats.write(&bytes).unwrap();
+        assert_eq!(ret, 1);
+        assert_eq!(stats.values.len(), 3);
+        assert_eq!(stats.sum, 6);
+        assert_eq!(stats.remainder.len(), 2);
+
+        // Cancellation of a reminder
+        let bytes = vec![0, 4];
+        let ret = stats.write(&bytes).unwrap();
+        assert_eq!(ret, 2);
+        assert_eq!(stats.values.len(), 4);
+        assert_eq!(stats.sum, 10);
+        assert_eq!(stats.remainder.len(), 0);
     }
 }
